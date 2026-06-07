@@ -178,6 +178,57 @@
   .header-credits { font-size: 0.68rem; color: rgba(255,255,255,0.75); margin-top: 3px; }
   .header-credits b { color: #fff; font-weight: 700; }
 
+  .seed-btn {
+    background: rgba(255,255,255,0.22);
+    border: 1px solid rgba(255,255,255,0.45);
+    border-radius: 16px;
+    padding: 5px 9px;
+    font-family: 'Jua', sans-serif;
+    font-size: 0.7rem;
+    color: #fff;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .seed-btn:hover { background: rgba(255,255,255,0.38); }
+
+  .seed-modal {
+    position: absolute;
+    top: 76px; right: 12px;
+    z-index: 100;
+    background: var(--white);
+    border: 2px solid var(--leaf);
+    border-radius: 20px;
+    padding: 18px;
+    width: 210px;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    animation: popIn .25s cubic-bezier(.175,.885,.32,1.275);
+  }
+  .seed-modal.hidden { display: none; }
+  .seed-modal input {
+    width: 100%; border: 2px solid #C8E6C9; border-radius: 20px;
+    padding: 8px 12px; font-size: 0.85rem; outline: none;
+    background: #F1F8E9; font-family: 'Nanum Gothic', sans-serif;
+    margin-top: 8px;
+  }
+  .seed-modal input:focus { border-color: var(--leaf); }
+  .seed-btns { display: flex; gap: 7px; margin-top: 10px; }
+  .seed-confirm-btn {
+    flex: 1; background: var(--leaf); color: #fff; border: none;
+    border-radius: 16px; padding: 7px; font-family: 'Jua', sans-serif;
+    font-size: 0.85rem; cursor: pointer;
+  }
+  .seed-confirm-btn:hover { background: var(--leaf-dark); }
+  .seed-cancel-btn {
+    flex: 1; background: #eee; color: #555; border: none;
+    border-radius: 16px; padding: 7px; font-family: 'Jua', sans-serif;
+    font-size: 0.85rem; cursor: pointer;
+  }
+  .seed-cancel-btn:hover { background: #ddd; }
+  #chatPage { position: relative; }
+
   .token-counter {
     background: rgba(255,255,255,0.25);
     border-radius: 20px;
@@ -326,6 +377,21 @@
       <div class="header-credits">앵무새(꼬꼬) 주인: <b>조윤혁</b> · 제작자: <b>김태인</b></div>
     </div>
     <div class="token-counter" id="tokenCounter">🌻 20번 남음</div>
+    <button class="seed-btn" onclick="openSeedAdmin()">🌱 씨앗 관리자</button>
+  </div>
+
+  <!-- 씨앗 관리자 모달 -->
+  <div class="seed-modal hidden" id="seedModal">
+    <div class="seed-box">
+      <div style="font-size:2rem;margin-bottom:8px">🌻</div>
+      <div style="font-family:'Jua',sans-serif;font-size:1.1rem;color:#2E7D32;margin-bottom:8px">씨앗 관리자</div>
+      <input type="password" id="seedPwInput" placeholder="비밀번호 입력..." />
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="seed-confirm-btn" onclick="checkSeedAdmin()">확인</button>
+        <button class="seed-cancel-btn" onclick="closeSeedAdmin()">취소</button>
+      </div>
+      <div id="seedMsg" style="font-size:0.78rem;margin-top:8px;color:#E53935;min-height:18px"></div>
+    </div>
   </div>
 
   <div class="messages" id="messages"></div>
@@ -400,12 +466,41 @@ const SYSTEM_PROMPT = `너는 꼬꼬라는 이름의 앵무새야. 사람이랑 
 // ── STATE ───────────────────────────────────────
 let history = [];
 let usedTurns = 0;
+let infiniteMode = false;
 
 function getTurns() {
   return parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10);
 }
 function saveTurns(n) {
   localStorage.setItem(STORAGE_KEY, String(n));
+}
+
+// ── 씨앗 관리자 ──────────────────────────────────
+function openSeedAdmin() {
+  document.getElementById('seedModal').classList.remove('hidden');
+  document.getElementById('seedPwInput').value = '';
+  document.getElementById('seedMsg').textContent = '';
+  document.getElementById('seedPwInput').focus();
+}
+function closeSeedAdmin() {
+  document.getElementById('seedModal').classList.add('hidden');
+}
+function checkSeedAdmin() {
+  const pw = document.getElementById('seedPwInput').value;
+  if (pw === 'iamgrass') {
+    infiniteMode = true;
+    document.getElementById('tokenCounter').textContent = '🌻 무한 🌻';
+    document.getElementById('tokenCounter').classList.remove('warn');
+    // 한도 배너 숨기고 입력 다시 활성화
+    limitBanner.classList.remove('show');
+    userInput.disabled = false;
+    sendBtn.disabled = false;
+    closeSeedAdmin();
+    addMessage('꽥!! 씨앗 무한 모드 ON! 이제 얼마든지 얘기해~ 🌻', 'bird');
+    userInput.focus();
+  } else {
+    document.getElementById('seedMsg').textContent = '❌ 비밀번호가 틀렸어!';
+  }
 }
 
 // ── DOM REFS ─────────────────────────────────────
@@ -473,7 +568,7 @@ function addMessage(text, role) {
 async function sendMessage() {
   const text = userInput.value.trim();
   if (!text) return;
-  if (usedTurns >= MAX_TURNS) { showLimitUI(); return; }
+  if (!infiniteMode && usedTurns >= MAX_TURNS) { showLimitUI(); return; }
 
   userInput.value = '';
   userInput.style.height = 'auto';
@@ -524,15 +619,16 @@ async function sendMessage() {
     addMessage(reply, 'bird');
 
     // 대화 1회 소모
-    usedTurns++;
-    saveTurns(usedTurns);
-    updateCounter();
-
-    if (usedTurns >= MAX_TURNS) {
-      setTimeout(() => {
-        addMessage('꼬꼬가 지쳤어~ 오늘 대화 다 썼어! 내일 와줘 🌻', 'bird');
-        showLimitUI();
-      }, 600);
+    if (!infiniteMode) {
+      usedTurns++;
+      saveTurns(usedTurns);
+      updateCounter();
+      if (usedTurns >= MAX_TURNS) {
+        setTimeout(() => {
+          addMessage('꼬꼬가 지쳤어~ 오늘 대화 다 썼어! 내일 와줘 🌻', 'bird');
+          showLimitUI();
+        }, 600);
+      }
     }
 
   } catch (err) {
@@ -552,6 +648,11 @@ userInput.addEventListener('input', () => {
 sendBtn.addEventListener('click', sendMessage);
 userInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !document.getElementById('seedModal').classList.contains('hidden')) {
+    checkSeedAdmin();
+  }
 });
 </script>
 </body>
